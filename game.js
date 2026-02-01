@@ -1,584 +1,419 @@
-// Sky Jumper - Mobile Game
-// A fun platformer game optimized for mobile devices
+// Space Runner - Phaser 3 Mobile Game
 
-class Game {
+const config = {
+    type: Phaser.AUTO,
+    width: 400,
+    height: 600,
+    parent: document.body,
+    backgroundColor: '#1a1a2e',
+    physics: {
+        default: 'arcade',
+        arcade: {
+            gravity: { y: 800 },
+            debug: false
+        }
+    },
+    scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+    },
+    scene: [BootScene, MenuScene, GameScene, GameOverScene]
+};
+
+// Boot Scene - Load assets
+class BootScene extends Phaser.Scene {
     constructor() {
-        this.canvas = document.getElementById('gameCanvas');
-        this.ctx = this.canvas.getContext('2d');
-
-        // Screen elements
-        this.startScreen = document.getElementById('start-screen');
-        this.gameOverScreen = document.getElementById('game-over-screen');
-        this.pauseScreen = document.getElementById('pause-screen');
-        this.hudScore = document.getElementById('score');
-        this.hudLives = document.getElementById('lives');
-        this.highScoreDisplay = document.getElementById('high-score-display');
-        this.finalScoreDisplay = document.getElementById('final-score');
-        this.bestScoreDisplay = document.getElementById('best-score');
-
-        // Game state
-        this.gameState = 'start'; // start, playing, paused, gameover
-        this.score = 0;
-        this.lives = 3;
-        this.highScore = parseInt(localStorage.getItem('skyJumperHighScore')) || 0;
-        this.difficulty = 1;
-
-        // Player
-        this.player = {
-            x: 0,
-            y: 0,
-            width: 40,
-            height: 40,
-            velocityY: 0,
-            velocityX: 0,
-            isJumping: false,
-            color: '#667eea'
-        };
-
-        // Game objects
-        this.platforms = [];
-        this.stars = [];
-        this.particles = [];
-        this.backgroundStars = [];
-
-        // Physics
-        this.gravity = 0.6;
-        this.jumpForce = -15;
-        this.platformSpeed = 3;
-
-        // Initialize
-        this.resize();
-        this.createBackgroundStars();
-        this.updateHighScoreDisplay();
-        this.bindEvents();
-        this.gameLoop();
+        super('BootScene');
     }
 
-    resize() {
-        const container = document.getElementById('game-container');
-        this.canvas.width = container.clientWidth;
-        this.canvas.height = container.clientHeight;
-
-        // Reset player position on resize
-        this.player.x = this.canvas.width / 2 - this.player.width / 2;
-        this.player.y = this.canvas.height - 150;
+    create() {
+        // Create game textures programmatically
+        this.createTextures();
+        this.scene.start('MenuScene');
     }
 
-    createBackgroundStars() {
-        this.backgroundStars = [];
-        for (let i = 0; i < 100; i++) {
-            this.backgroundStars.push({
-                x: Math.random() * this.canvas.width,
-                y: Math.random() * this.canvas.height,
-                size: Math.random() * 2 + 1,
-                opacity: Math.random(),
-                twinkleSpeed: Math.random() * 0.02 + 0.01
-            });
-        }
-    }
-
-    bindEvents() {
-        // Touch events
-        this.canvas.addEventListener('touchstart', (e) => this.handleInput(e), { passive: false });
-        this.canvas.addEventListener('touchmove', (e) => this.handleMove(e), { passive: false });
-        this.canvas.addEventListener('touchend', (e) => this.handleInputEnd(e), { passive: false });
-
-        // Mouse events for testing on desktop
-        this.canvas.addEventListener('mousedown', (e) => this.handleInput(e));
-        this.canvas.addEventListener('mousemove', (e) => this.handleMove(e));
-        this.canvas.addEventListener('mouseup', (e) => this.handleInputEnd(e));
-
-        // Keyboard events
-        document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && this.gameState === 'playing') {
-                this.jump();
-            }
-        });
-
-        // Button events
-        document.getElementById('start-btn').addEventListener('click', () => this.startGame());
-        document.getElementById('restart-btn').addEventListener('click', () => this.startGame());
-        document.getElementById('pause-btn').addEventListener('click', () => this.togglePause());
-        document.getElementById('resume-btn').addEventListener('click', () => this.togglePause());
-
-        // Resize
-        window.addEventListener('resize', () => this.resize());
-    }
-
-    handleInput(e) {
-        e.preventDefault();
-        if (this.gameState !== 'playing') return;
-
-        const touch = e.touches ? e.touches[0] : e;
-        const rect = this.canvas.getBoundingClientRect();
-        const x = touch.clientX - rect.left;
-
-        // Store touch position for movement
-        this.touchX = x;
-        this.isTouching = true;
-
-        // Jump on tap
-        this.jump();
-    }
-
-    handleMove(e) {
-        e.preventDefault();
-        if (this.gameState !== 'playing' || !this.isTouching) return;
-
-        const touch = e.touches ? e.touches[0] : e;
-        const rect = this.canvas.getBoundingClientRect();
-        this.touchX = touch.clientX - rect.left;
-    }
-
-    handleInputEnd(e) {
-        this.isTouching = false;
-    }
-
-    jump() {
-        if (!this.player.isJumping || this.player.doubleJumpAvailable) {
-            if (this.player.isJumping) {
-                this.player.doubleJumpAvailable = false;
-                this.player.velocityY = this.jumpForce * 0.8;
-                this.createJumpParticles();
-            } else {
-                this.player.velocityY = this.jumpForce;
-                this.player.isJumping = true;
-                this.player.doubleJumpAvailable = true;
-                this.createJumpParticles();
-            }
-        }
-    }
-
-    createJumpParticles() {
-        for (let i = 0; i < 10; i++) {
-            this.particles.push({
-                x: this.player.x + this.player.width / 2,
-                y: this.player.y + this.player.height,
-                velocityX: (Math.random() - 0.5) * 6,
-                velocityY: Math.random() * 3 + 1,
-                size: Math.random() * 6 + 2,
-                color: `hsl(${250 + Math.random() * 30}, 70%, 60%)`,
-                life: 1
-            });
-        }
-    }
-
-    createStarParticles(x, y) {
-        for (let i = 0; i < 15; i++) {
-            this.particles.push({
-                x: x,
-                y: y,
-                velocityX: (Math.random() - 0.5) * 8,
-                velocityY: (Math.random() - 0.5) * 8,
-                size: Math.random() * 5 + 2,
-                color: '#ffd700',
-                life: 1
-            });
-        }
-    }
-
-    startGame() {
-        this.gameState = 'playing';
-        this.score = 0;
-        this.lives = 3;
-        this.difficulty = 1;
-        this.platformSpeed = 3;
-
-        // Reset player
-        this.player.x = this.canvas.width / 2 - this.player.width / 2;
-        this.player.y = this.canvas.height - 150;
-        this.player.velocityY = 0;
-        this.player.isJumping = false;
-
-        // Clear and create platforms
-        this.platforms = [];
-        this.stars = [];
-        this.particles = [];
-
-        // Create initial platforms
-        this.createInitialPlatforms();
-
-        // Hide screens
-        this.startScreen.classList.add('hidden');
-        this.gameOverScreen.classList.add('hidden');
-        this.pauseScreen.classList.add('hidden');
-
-        this.updateHUD();
-    }
-
-    createInitialPlatforms() {
-        // Ground platform
-        this.platforms.push({
-            x: 0,
-            y: this.canvas.height - 50,
-            width: this.canvas.width,
-            height: 50,
-            isGround: true
-        });
-
-        // Initial platforms
-        for (let i = 0; i < 5; i++) {
-            this.spawnPlatform(this.canvas.height - 150 - (i * 150));
-        }
-    }
-
-    spawnPlatform(y = -50) {
-        const minWidth = 80 - this.difficulty * 5;
-        const maxWidth = 150 - this.difficulty * 5;
-        const width = Math.max(60, Math.random() * (maxWidth - minWidth) + minWidth);
-
-        const platform = {
-            x: Math.random() * (this.canvas.width - width),
-            y: y,
-            width: width,
-            height: 15,
-            color: `hsl(${250 + Math.random() * 30}, 60%, 50%)`
-        };
-
-        this.platforms.push(platform);
-
-        // Spawn star on some platforms
-        if (Math.random() > 0.5) {
-            this.stars.push({
-                x: platform.x + platform.width / 2,
-                y: platform.y - 25,
-                size: 15,
-                collected: false,
-                rotation: 0
-            });
-        }
-    }
-
-    togglePause() {
-        if (this.gameState === 'playing') {
-            this.gameState = 'paused';
-            this.pauseScreen.classList.remove('hidden');
-        } else if (this.gameState === 'paused') {
-            this.gameState = 'playing';
-            this.pauseScreen.classList.add('hidden');
-        }
-    }
-
-    update() {
-        if (this.gameState !== 'playing') return;
-
-        // Update difficulty
-        this.difficulty = 1 + Math.floor(this.score / 500) * 0.2;
-        this.platformSpeed = 3 + this.difficulty * 0.5;
-
-        // Horizontal movement based on touch
-        if (this.isTouching) {
-            const targetX = this.touchX - this.player.width / 2;
-            this.player.velocityX = (targetX - this.player.x) * 0.15;
-        } else {
-            this.player.velocityX *= 0.9;
-        }
-
-        // Apply physics
-        this.player.velocityY += this.gravity;
-        this.player.x += this.player.velocityX;
-        this.player.y += this.player.velocityY;
-
-        // Boundary check
-        if (this.player.x < 0) this.player.x = 0;
-        if (this.player.x + this.player.width > this.canvas.width) {
-            this.player.x = this.canvas.width - this.player.width;
-        }
-
-        // Move platforms down (scroll effect)
-        if (this.player.y < this.canvas.height / 2) {
-            const diff = this.canvas.height / 2 - this.player.y;
-            this.player.y = this.canvas.height / 2;
-
-            this.platforms.forEach(p => {
-                if (!p.isGround) p.y += diff;
-            });
-
-            this.stars.forEach(s => {
-                s.y += diff;
-            });
-
-            this.score += Math.floor(diff);
-        }
-
-        // Platform collision
-        this.platforms.forEach(platform => {
-            if (this.checkCollision(this.player, platform) && this.player.velocityY > 0) {
-                if (this.player.y + this.player.height - this.player.velocityY <= platform.y + 5) {
-                    this.player.y = platform.y - this.player.height;
-                    this.player.velocityY = 0;
-                    this.player.isJumping = false;
-                    this.player.doubleJumpAvailable = false;
-                }
-            }
-        });
-
-        // Star collection
-        this.stars.forEach(star => {
-            if (!star.collected) {
-                const dx = (this.player.x + this.player.width / 2) - star.x;
-                const dy = (this.player.y + this.player.height / 2) - star.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                if (distance < 30) {
-                    star.collected = true;
-                    this.score += 100;
-                    this.createStarParticles(star.x, star.y);
-                }
-            }
-            star.rotation += 0.05;
-        });
-
-        // Remove off-screen platforms and spawn new ones
-        this.platforms = this.platforms.filter(p => p.y < this.canvas.height + 50);
-        this.stars = this.stars.filter(s => s.y < this.canvas.height + 50);
-
-        // Spawn new platforms
-        const topPlatform = this.platforms.reduce((min, p) => p.y < min ? p.y : min, this.canvas.height);
-        if (topPlatform > 0) {
-            this.spawnPlatform(topPlatform - (100 + Math.random() * 50));
-        }
-
-        // Check if player falls
-        if (this.player.y > this.canvas.height) {
-            this.loseLife();
-        }
-
-        // Update particles
-        this.particles.forEach(p => {
-            p.x += p.velocityX;
-            p.y += p.velocityY;
-            p.life -= 0.02;
-            p.size *= 0.98;
-        });
-        this.particles = this.particles.filter(p => p.life > 0);
-
-        // Update background stars
-        this.backgroundStars.forEach(star => {
-            star.opacity += star.twinkleSpeed;
-            if (star.opacity > 1 || star.opacity < 0.3) {
-                star.twinkleSpeed *= -1;
-            }
-        });
-
-        this.updateHUD();
-    }
-
-    checkCollision(a, b) {
-        return a.x < b.x + b.width &&
-               a.x + a.width > b.x &&
-               a.y < b.y + b.height &&
-               a.y + a.height > b.y;
-    }
-
-    loseLife() {
-        this.lives--;
-
-        if (this.lives <= 0) {
-            this.gameOver();
-        } else {
-            // Reset player position
-            this.player.y = this.canvas.height / 2;
-            this.player.velocityY = 0;
-
-            // Flash effect
-            this.player.color = '#ff4444';
-            setTimeout(() => {
-                this.player.color = '#667eea';
-            }, 200);
-        }
-
-        this.updateHUD();
-    }
-
-    gameOver() {
-        this.gameState = 'gameover';
-
-        // Update high score
-        if (this.score > this.highScore) {
-            this.highScore = this.score;
-            localStorage.setItem('skyJumperHighScore', this.highScore);
-        }
-
-        this.finalScoreDisplay.textContent = this.score;
-        this.bestScoreDisplay.textContent = this.highScore;
-        this.gameOverScreen.classList.remove('hidden');
-        this.updateHighScoreDisplay();
-    }
-
-    updateHUD() {
-        this.hudScore.textContent = `Score: ${this.score}`;
-        this.hudLives.textContent = '❤️'.repeat(Math.max(0, this.lives));
-    }
-
-    updateHighScoreDisplay() {
-        this.highScoreDisplay.textContent = this.highScore;
-    }
-
-    draw() {
-        // Clear canvas
-        this.ctx.fillStyle = '#0f0c29';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Draw gradient background
-        const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
-        gradient.addColorStop(0, '#0f0c29');
-        gradient.addColorStop(0.5, '#302b63');
-        gradient.addColorStop(1, '#24243e');
-        this.ctx.fillStyle = gradient;
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Draw background stars
-        this.backgroundStars.forEach(star => {
-            this.ctx.beginPath();
-            this.ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
-            this.ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`;
-            this.ctx.fill();
-        });
-
-        // Draw platforms
-        this.platforms.forEach(platform => {
-            if (platform.isGround) {
-                // Ground platform gradient
-                const groundGradient = this.ctx.createLinearGradient(0, platform.y, 0, platform.y + platform.height);
-                groundGradient.addColorStop(0, '#4a4a7a');
-                groundGradient.addColorStop(1, '#2a2a4a');
-                this.ctx.fillStyle = groundGradient;
-            } else {
-                this.ctx.fillStyle = platform.color || '#667eea';
-            }
-
-            // Rounded rectangle for platforms
-            this.roundRect(platform.x, platform.y, platform.width, platform.height, 8);
-
-            // Platform glow
-            if (!platform.isGround) {
-                this.ctx.shadowColor = platform.color || '#667eea';
-                this.ctx.shadowBlur = 10;
-                this.ctx.fill();
-                this.ctx.shadowBlur = 0;
-            } else {
-                this.ctx.fill();
-            }
-        });
-
-        // Draw stars
-        this.stars.forEach(star => {
-            if (!star.collected) {
-                this.ctx.save();
-                this.ctx.translate(star.x, star.y);
-                this.ctx.rotate(star.rotation);
-                this.drawStar(0, 0, star.size);
-                this.ctx.restore();
-            }
-        });
-
-        // Draw particles
-        this.particles.forEach(p => {
-            this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            this.ctx.fillStyle = p.color;
-            this.ctx.globalAlpha = p.life;
-            this.ctx.fill();
-            this.ctx.globalAlpha = 1;
-        });
-
-        // Draw player
-        this.drawPlayer();
-    }
-
-    drawPlayer() {
-        const p = this.player;
-        const centerX = p.x + p.width / 2;
-        const centerY = p.y + p.height / 2;
-
-        // Player glow
-        this.ctx.shadowColor = p.color;
-        this.ctx.shadowBlur = 20;
-
-        // Main body (rocket shape)
-        this.ctx.fillStyle = p.color;
-        this.ctx.beginPath();
-        this.ctx.moveTo(centerX, p.y);
-        this.ctx.lineTo(p.x + p.width, p.y + p.height * 0.7);
-        this.ctx.lineTo(p.x + p.width * 0.7, p.y + p.height);
-        this.ctx.lineTo(p.x + p.width * 0.3, p.y + p.height);
-        this.ctx.lineTo(p.x, p.y + p.height * 0.7);
-        this.ctx.closePath();
-        this.ctx.fill();
-
-        // Window
-        this.ctx.shadowBlur = 0;
-        this.ctx.fillStyle = '#a8d8ff';
-        this.ctx.beginPath();
-        this.ctx.arc(centerX, p.y + p.height * 0.4, 8, 0, Math.PI * 2);
-        this.ctx.fill();
-
-        // Flame when jumping/falling
-        if (this.player.velocityY < 0 || this.player.isJumping) {
-            this.ctx.fillStyle = '#ff6b35';
-            this.ctx.beginPath();
-            this.ctx.moveTo(p.x + p.width * 0.3, p.y + p.height);
-            this.ctx.lineTo(centerX, p.y + p.height + 15 + Math.random() * 10);
-            this.ctx.lineTo(p.x + p.width * 0.7, p.y + p.height);
-            this.ctx.closePath();
-            this.ctx.fill();
-
-            this.ctx.fillStyle = '#ffd700';
-            this.ctx.beginPath();
-            this.ctx.moveTo(p.x + p.width * 0.4, p.y + p.height);
-            this.ctx.lineTo(centerX, p.y + p.height + 8 + Math.random() * 5);
-            this.ctx.lineTo(p.x + p.width * 0.6, p.y + p.height);
-            this.ctx.closePath();
-            this.ctx.fill();
-        }
-    }
-
-    drawStar(x, y, size) {
-        this.ctx.fillStyle = '#ffd700';
-        this.ctx.shadowColor = '#ffd700';
-        this.ctx.shadowBlur = 15;
-        this.ctx.beginPath();
-
-        for (let i = 0; i < 5; i++) {
-            const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
-            const px = x + Math.cos(angle) * size;
-            const py = y + Math.sin(angle) * size;
-
-            if (i === 0) {
-                this.ctx.moveTo(px, py);
-            } else {
-                this.ctx.lineTo(px, py);
-            }
-        }
-
-        this.ctx.closePath();
-        this.ctx.fill();
-        this.ctx.shadowBlur = 0;
-    }
-
-    roundRect(x, y, width, height, radius) {
-        this.ctx.beginPath();
-        this.ctx.moveTo(x + radius, y);
-        this.ctx.lineTo(x + width - radius, y);
-        this.ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-        this.ctx.lineTo(x + width, y + height - radius);
-        this.ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-        this.ctx.lineTo(x + radius, y + height);
-        this.ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-        this.ctx.lineTo(x, y + radius);
-        this.ctx.quadraticCurveTo(x, y, x + radius, y);
-        this.ctx.closePath();
-    }
-
-    gameLoop() {
-        this.update();
-        this.draw();
-        requestAnimationFrame(() => this.gameLoop());
+    createTextures() {
+        // Player ship
+        const playerGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        playerGraphics.fillStyle(0x00ff88);
+        playerGraphics.fillTriangle(20, 0, 0, 40, 40, 40);
+        playerGraphics.fillStyle(0x00cc66);
+        playerGraphics.fillRect(15, 40, 10, 8);
+        playerGraphics.generateTexture('player', 40, 48);
+
+        // Enemy
+        const enemyGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        enemyGraphics.fillStyle(0xff4444);
+        enemyGraphics.fillTriangle(20, 40, 0, 0, 40, 0);
+        enemyGraphics.generateTexture('enemy', 40, 40);
+
+        // Bullet
+        const bulletGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        bulletGraphics.fillStyle(0xffff00);
+        bulletGraphics.fillRect(0, 0, 6, 15);
+        bulletGraphics.generateTexture('bullet', 6, 15);
+
+        // Star
+        const starGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        starGraphics.fillStyle(0xffd700);
+        starGraphics.fillStar(12, 12, 5, 12, 6);
+        starGraphics.generateTexture('star', 24, 24);
+
+        // Particle
+        const particleGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        particleGraphics.fillStyle(0xffffff);
+        particleGraphics.fillCircle(4, 4, 4);
+        particleGraphics.generateTexture('particle', 8, 8);
     }
 }
 
-// Initialize game when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    new Game();
-});
+// Menu Scene
+class MenuScene extends Phaser.Scene {
+    constructor() {
+        super('MenuScene');
+    }
+
+    create() {
+        const { width, height } = this.scale;
+
+        // Title
+        this.add.text(width / 2, height / 3, 'SPACE\nRUNNER', {
+            fontSize: '48px',
+            fontFamily: 'Arial',
+            color: '#00ff88',
+            align: 'center'
+        }).setOrigin(0.5);
+
+        // Instructions
+        this.add.text(width / 2, height / 2, 'Tap left/right to move\nTap center to shoot', {
+            fontSize: '18px',
+            fontFamily: 'Arial',
+            color: '#888888',
+            align: 'center'
+        }).setOrigin(0.5);
+
+        // High score
+        const highScore = localStorage.getItem('spaceRunnerHighScore') || 0;
+        this.add.text(width / 2, height / 2 + 80, `High Score: ${highScore}`, {
+            fontSize: '20px',
+            fontFamily: 'Arial',
+            color: '#ffd700'
+        }).setOrigin(0.5);
+
+        // Start button
+        const startBtn = this.add.text(width / 2, height * 0.75, '[ TAP TO START ]', {
+            fontSize: '24px',
+            fontFamily: 'Arial',
+            color: '#ffffff'
+        }).setOrigin(0.5).setInteractive();
+
+        this.tweens.add({
+            targets: startBtn,
+            alpha: 0.5,
+            duration: 800,
+            yoyo: true,
+            repeat: -1
+        });
+
+        this.input.on('pointerdown', () => {
+            this.scene.start('GameScene');
+        });
+
+        // Background stars
+        for (let i = 0; i < 50; i++) {
+            const star = this.add.circle(
+                Phaser.Math.Between(0, width),
+                Phaser.Math.Between(0, height),
+                Phaser.Math.Between(1, 2),
+                0xffffff,
+                Phaser.Math.FloatBetween(0.3, 1)
+            );
+            this.tweens.add({
+                targets: star,
+                alpha: 0.2,
+                duration: Phaser.Math.Between(500, 1500),
+                yoyo: true,
+                repeat: -1
+            });
+        }
+    }
+}
+
+// Main Game Scene
+class GameScene extends Phaser.Scene {
+    constructor() {
+        super('GameScene');
+    }
+
+    create() {
+        const { width, height } = this.scale;
+
+        this.score = 0;
+        this.gameOver = false;
+
+        // Background stars
+        this.stars = this.add.group();
+        for (let i = 0; i < 30; i++) {
+            const star = this.add.circle(
+                Phaser.Math.Between(0, width),
+                Phaser.Math.Between(0, height),
+                Phaser.Math.Between(1, 2),
+                0xffffff,
+                Phaser.Math.FloatBetween(0.3, 0.8)
+            );
+            this.stars.add(star);
+        }
+
+        // Player
+        this.player = this.physics.add.sprite(width / 2, height - 80, 'player');
+        this.player.setCollideWorldBounds(true);
+        this.player.body.allowGravity = false;
+
+        // Groups
+        this.bullets = this.physics.add.group();
+        this.enemies = this.physics.add.group();
+        this.collectibles = this.physics.add.group();
+
+        // Collisions
+        this.physics.add.overlap(this.bullets, this.enemies, this.hitEnemy, null, this);
+        this.physics.add.overlap(this.player, this.enemies, this.playerHit, null, this);
+        this.physics.add.overlap(this.player, this.collectibles, this.collectStar, null, this);
+
+        // Timers
+        this.enemyTimer = this.time.addEvent({
+            delay: 1500,
+            callback: this.spawnEnemy,
+            callbackScope: this,
+            loop: true
+        });
+
+        this.starTimer = this.time.addEvent({
+            delay: 3000,
+            callback: this.spawnStar,
+            callbackScope: this,
+            loop: true
+        });
+
+        // Score text
+        this.scoreText = this.add.text(16, 16, 'Score: 0', {
+            fontSize: '20px',
+            fontFamily: 'Arial',
+            color: '#ffffff'
+        });
+
+        // Touch controls
+        this.input.on('pointerdown', (pointer) => {
+            if (this.gameOver) return;
+
+            const third = width / 3;
+            if (pointer.x < third) {
+                this.moveLeft = true;
+            } else if (pointer.x > third * 2) {
+                this.moveRight = true;
+            } else {
+                this.shoot();
+            }
+        });
+
+        this.input.on('pointerup', () => {
+            this.moveLeft = false;
+            this.moveRight = false;
+        });
+
+        // Keyboard controls
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+        // Particle emitter for explosions
+        this.explosionEmitter = this.add.particles(0, 0, 'particle', {
+            speed: { min: 50, max: 150 },
+            scale: { start: 1, end: 0 },
+            lifespan: 400,
+            blendMode: 'ADD',
+            emitting: false
+        });
+    }
+
+    update() {
+        if (this.gameOver) return;
+
+        const { width, height } = this.scale;
+
+        // Player movement
+        const speed = 300;
+        this.player.setVelocityX(0);
+
+        if (this.moveLeft || this.cursors.left.isDown) {
+            this.player.setVelocityX(-speed);
+        } else if (this.moveRight || this.cursors.right.isDown) {
+            this.player.setVelocityX(speed);
+        }
+
+        if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+            this.shoot();
+        }
+
+        // Move background stars
+        this.stars.children.iterate((star) => {
+            star.y += 1;
+            if (star.y > height) {
+                star.y = 0;
+                star.x = Phaser.Math.Between(0, width);
+            }
+        });
+
+        // Clean up off-screen objects
+        this.bullets.children.iterate((bullet) => {
+            if (bullet && bullet.y < -20) bullet.destroy();
+        });
+
+        this.enemies.children.iterate((enemy) => {
+            if (enemy && enemy.y > height + 50) {
+                enemy.destroy();
+                this.addScore(5); // Points for dodging
+            }
+        });
+
+        this.collectibles.children.iterate((star) => {
+            if (star && star.y > height + 50) star.destroy();
+        });
+
+        // Increase difficulty over time
+        if (this.score > 0 && this.score % 500 === 0) {
+            if (this.enemyTimer.delay > 500) {
+                this.enemyTimer.delay -= 50;
+            }
+        }
+    }
+
+    shoot() {
+        const bullet = this.bullets.create(this.player.x, this.player.y - 30, 'bullet');
+        bullet.body.allowGravity = false;
+        bullet.setVelocityY(-400);
+    }
+
+    spawnEnemy() {
+        if (this.gameOver) return;
+
+        const x = Phaser.Math.Between(40, this.scale.width - 40);
+        const enemy = this.enemies.create(x, -40, 'enemy');
+        enemy.body.allowGravity = false;
+        enemy.setVelocityY(Phaser.Math.Between(100, 200));
+
+        // Some enemies move sideways
+        if (Math.random() > 0.5) {
+            enemy.setVelocityX(Phaser.Math.Between(-50, 50));
+        }
+    }
+
+    spawnStar() {
+        if (this.gameOver) return;
+
+        const x = Phaser.Math.Between(40, this.scale.width - 40);
+        const star = this.collectibles.create(x, -30, 'star');
+        star.body.allowGravity = false;
+        star.setVelocityY(120);
+
+        this.tweens.add({
+            targets: star,
+            angle: 360,
+            duration: 2000,
+            repeat: -1
+        });
+    }
+
+    hitEnemy(bullet, enemy) {
+        this.explosionEmitter.explode(10, enemy.x, enemy.y);
+        bullet.destroy();
+        enemy.destroy();
+        this.addScore(25);
+    }
+
+    collectStar(player, star) {
+        this.explosionEmitter.explode(8, star.x, star.y);
+        star.destroy();
+        this.addScore(100);
+    }
+
+    playerHit(player, enemy) {
+        this.explosionEmitter.explode(20, player.x, player.y);
+        enemy.destroy();
+        this.endGame();
+    }
+
+    addScore(points) {
+        this.score += points;
+        this.scoreText.setText(`Score: ${this.score}`);
+    }
+
+    endGame() {
+        this.gameOver = true;
+        this.player.setVisible(false);
+        this.physics.pause();
+
+        // Save high score
+        const highScore = localStorage.getItem('spaceRunnerHighScore') || 0;
+        if (this.score > highScore) {
+            localStorage.setItem('spaceRunnerHighScore', this.score);
+        }
+
+        this.time.delayedCall(1000, () => {
+            this.scene.start('GameOverScene', { score: this.score });
+        });
+    }
+}
+
+// Game Over Scene
+class GameOverScene extends Phaser.Scene {
+    constructor() {
+        super('GameOverScene');
+    }
+
+    init(data) {
+        this.finalScore = data.score || 0;
+    }
+
+    create() {
+        const { width, height } = this.scale;
+        const highScore = localStorage.getItem('spaceRunnerHighScore') || 0;
+
+        this.add.text(width / 2, height / 3, 'GAME OVER', {
+            fontSize: '40px',
+            fontFamily: 'Arial',
+            color: '#ff4444'
+        }).setOrigin(0.5);
+
+        this.add.text(width / 2, height / 2 - 20, `Score: ${this.finalScore}`, {
+            fontSize: '28px',
+            fontFamily: 'Arial',
+            color: '#ffffff'
+        }).setOrigin(0.5);
+
+        this.add.text(width / 2, height / 2 + 30, `Best: ${highScore}`, {
+            fontSize: '22px',
+            fontFamily: 'Arial',
+            color: '#ffd700'
+        }).setOrigin(0.5);
+
+        const restartBtn = this.add.text(width / 2, height * 0.7, '[ TAP TO RESTART ]', {
+            fontSize: '22px',
+            fontFamily: 'Arial',
+            color: '#00ff88'
+        }).setOrigin(0.5).setInteractive();
+
+        this.tweens.add({
+            targets: restartBtn,
+            alpha: 0.5,
+            duration: 800,
+            yoyo: true,
+            repeat: -1
+        });
+
+        this.input.on('pointerdown', () => {
+            this.scene.start('GameScene');
+        });
+    }
+}
+
+// Start the game
+const game = new Phaser.Game(config);
