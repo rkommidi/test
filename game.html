@@ -1,0 +1,55 @@
+<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Space Runner</title></head><body style="margin:0;background:#000;display:flex;justify-content:center;align-items:center;height:100vh"><canvas id="c"></canvas><script>
+var c=document.getElementById('c'),x=c.getContext('2d'),W=360,H=560,p={x:180,y:480,alive:1},bullets=[],enemies=[],stars=[],score=0,best=localStorage.getItem('hs')||0,state='menu';
+c.width=W;c.height=H;c.style.maxWidth='100vw';c.style.maxHeight='100vh';
+
+c.ontouchstart=c.onmousedown=function(e){
+  e.preventDefault();
+  var r=c.getBoundingClientRect(),tx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+  tx=tx*(W/r.width);
+  if(state!='play'){state='play';score=0;p.alive=1;p.x=180;enemies=[];bullets=[];stars=[];return}
+  if(tx<W/3)p.x-=30;
+  else if(tx>W*2/3)p.x+=30;
+  else bullets.push({x:p.x,y:p.y-20});
+  p.x=Math.max(20,Math.min(W-20,p.x));
+};
+
+setInterval(function(){
+  if(state=='play'){
+    if(Math.random()<0.03)enemies.push({x:Math.random()*(W-40)+20,y:-30});
+    if(Math.random()<0.01)stars.push({x:Math.random()*(W-30)+15,y:-20});
+    bullets=bullets.filter(function(b){b.y-=8;return b.y>0});
+    enemies=enemies.filter(function(e){
+      e.y+=3;
+      bullets.forEach(function(b,i){if(Math.abs(e.x-b.x)<25&&Math.abs(e.y-b.y)<25){score+=25;e.y=999;bullets.splice(i,1)}});
+      if(p.alive&&Math.abs(e.x-p.x)<25&&Math.abs(e.y-p.y)<30){p.alive=0;state='over';if(score>best){best=score;localStorage.setItem('hs',best)}}
+      return e.y<H+40;
+    });
+    stars=stars.filter(function(s){
+      s.y+=2;
+      if(p.alive&&Math.abs(s.x-p.x)<25&&Math.abs(s.y-p.y)<25){score+=100;return 0}
+      return s.y<H+30;
+    });
+  }
+},50);
+
+setInterval(function(){
+  x.fillStyle='#0a0a2a';x.fillRect(0,0,W,H);
+  for(var i=0;i<30;i++){x.fillStyle='rgba(255,255,255,0.5)';x.fillRect(Math.random()*W,Math.random()*H,2,2)}
+  if(state=='play'||state=='over'){
+    x.fillStyle='#ff0';bullets.forEach(function(b){x.fillRect(b.x-3,b.y,6,12)});
+    x.fillStyle='#f44';enemies.forEach(function(e){x.beginPath();x.moveTo(e.x,e.y+20);x.lineTo(e.x-18,e.y-15);x.lineTo(e.x+18,e.y-15);x.fill()});
+    x.fillStyle='#fd0';stars.forEach(function(s){x.beginPath();x.arc(s.x,s.y,12,0,7);x.fill()});
+    if(p.alive){x.fillStyle='#0f8';x.beginPath();x.moveTo(p.x,p.y-20);x.lineTo(p.x-18,p.y+18);x.lineTo(p.x+18,p.y+18);x.fill()}
+    x.fillStyle='#fff';x.font='20px Arial';x.fillText('Score: '+score,10,30);
+  }
+  if(state=='menu'||state=='over'){
+    x.fillStyle='rgba(0,0,0,0.7)';x.fillRect(0,0,W,H);
+    x.fillStyle=state=='over'?'#f44':'#0f8';x.font='bold 36px Arial';x.textAlign='center';
+    x.fillText(state=='over'?'GAME OVER':'SPACE RUNNER',W/2,200);
+    x.fillStyle='#fff';x.font='18px Arial';
+    x.fillText(state=='over'?'Score: '+score:'Tap left/right to move',W/2,260);
+    x.fillText(state=='over'?'Best: '+best:'Tap center to shoot',W/2,290);
+    x.fillStyle='#0f8';x.fillText('[ TAP TO '+(state=='over'?'RESTART':'START')+' ]',W/2,380);
+  }
+},33);
+</script></body></html>
