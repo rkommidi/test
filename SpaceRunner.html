@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Space Runner</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+        #gameCanvas {
+            background: linear-gradient(180deg, #0a0a1a 0%, #1a1a3a 100%);
+            max-width: 100vw;
+            max-height: 100vh;
+        }
+    </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+// ============================================================================
+// SPACE RUNNER - Complete HTML5 Mobile Game
+// ============================================================================
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Game dimensions
+const GAME_WIDTH = 400;
+const GAME_HEIGHT = 600;
+
+// Resize canvas
+function resize() {
+    const scale = Math.min(window.innerWidth / GAME_WIDTH, window.innerHeight / GAME_HEIGHT);
+    canvas.width = GAME_WIDTH;
+    canvas.height = GAME_HEIGHT;
+    canvas.style.width = (GAME_WIDTH * scale) + 'px';
+    canvas.style.height = (GAME_HEIGHT * scale) + 'px';
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ============================================================================
+// GAME STATE
+// ============================================================================
+const game = {
+    state: 'menu', // menu, playing, paused, gameover
+    score: 0,
+    highScore: parseInt(localStorage.getItem('spaceRunnerHighScore')) || 0,
+    difficulty: 1
+};
+
+// ============================================================================
+// PLAYER
+// ============================================================================
+const player = {
+    x: GAME_WIDTH / 2,
+    y: GAME_HEIGHT - 80,
+    width: 40,
+    height: 48,
+    speed: 5,
+    targetX: GAME_WIDTH / 2,
+    alive: true
+};
+
+// ============================================================================
+// GAME OBJECTS
+// ============================================================================
+let bullets = [];
+let enemies = [];
+let stars = [];
+let particles = [];
+let bgStars = [];
+
+// Create background stars
+for (let i = 0; i < 60; i++) {
+    bgStars.push({
+        x: Math.random() * GAME_WIDTH,
+        y: Math.random() * GAME_HEIGHT,
+        size: Math.random() * 2 + 0.5,
+        speed: Math.random() * 0.5 + 0.2,
+        brightness: Math.random() * 0.7 + 0.3
+    });
+}
+
+// ============================================================================
+// INPUT HANDLING
+// ============================================================================
+let touchX = null;
+let isTouching = false;
+
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = GAME_WIDTH / rect.width;
+    const x = (e.touches[0].clientX - rect.left) * scaleX;
+
+    if (game.state === 'menu' || game.state === 'gameover') {
+        startGame();
+        return;
+    }
+
+    if (game.state === 'playing') {
+        isTouching = true;
+        touchX = x;
+
+        // Shoot if tapping center
+        const third = GAME_WIDTH / 3;
+        if (x > third && x < third * 2) {
+            shoot();
+        }
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (game.state !== 'playing') return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = GAME_WIDTH / rect.width;
+    touchX = (e.touches[0].clientX - rect.left) * scaleX;
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => {
+    isTouching = false;
+    touchX = null;
+});
+
+// Mouse controls
+canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = GAME_WIDTH / rect.width;
+    const x = (e.clientX - rect.left) * scaleX;
+
+    if (game.state === 'menu' || game.state === 'gameover') {
+        startGame();
+        return;
+    }
+
+    if (game.state === 'playing') {
+        isTouching = true;
+        touchX = x;
+
+        const third = GAME_WIDTH / 3;
+        if (x > third && x < third * 2) {
+            shoot();
+        }
+    }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+    if (!isTouching || game.state !== 'playing') return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = GAME_WIDTH / rect.width;
+    touchX = (e.clientX - rect.left) * scaleX;
+});
+
+canvas.addEventListener('mouseup', () => {
+    isTouching = false;
+    touchX = null;
+});
+
+// Keyboard controls
+const keys = {};
+document.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+
+    if (e.code === 'Space') {
+        if (game.state === 'menu' || game.state === 'gameover') {
+            startGame();
+        } else if (game.state === 'playing') {
+            shoot();
+        }
+    }
+});
+document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+// ============================================================================
+// GAME FUNCTIONS
+// ============================================================================
+function startGame() {
+    game.state = 'playing';
+    game.score = 0;
+    game.difficulty = 1;
+
+    player.x = GAME_WIDTH / 2;
+    player.y = GAME_HEIGHT - 80;
+    player.targetX = GAME_WIDTH / 2;
+    player.alive = true;
+
+    bullets = [];
+    enemies = [];
+    stars = [];
+    particles = [];
+
+    lastEnemySpawn = Date.now();
+    lastStarSpawn = Date.now();
+}
+
+function shoot() {
+    bullets.push({
+        x: player.x,
+        y: player.y - 25,
+        width: 6,
+        height: 15,
+        speed: 10
+    });
+}
+
+function spawnEnemy() {
+    const types = ['basic', 'fast', 'zigzag'];
+    const type = types[Math.floor(Math.random() * types.length)];
+
+    enemies.push({
+        x: Math.random() * (GAME_WIDTH - 40) + 20,
+        y: -40,
+        width: 40,
+        height: 40,
+        speed: type === 'fast' ? 4 : 2 + game.difficulty * 0.3,
+        type: type,
+        time: 0,
+        startX: 0
+    });
+}
+
+function spawnStar() {
+    stars.push({
+        x: Math.random() * (GAME_WIDTH - 30) + 15,
+        y: -30,
+        size: 15,
+        speed: 2,
+        rotation: 0
+    });
+}
+
+function createExplosion(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8,
+            size: Math.random() * 4 + 2,
+            color: color,
+            life: 1
+        });
+    }
+}
+
+function gameOver() {
+    game.state = 'gameover';
+    player.alive = false;
+    createExplosion(player.x, player.y, '#00ff88', 30);
+
+    if (game.score > game.highScore) {
+        game.highScore = game.score;
+        localStorage.setItem('spaceRunnerHighScore', game.highScore);
+    }
+}
+
+// ============================================================================
+// UPDATE
+// ============================================================================
+let lastEnemySpawn = Date.now();
+let lastStarSpawn = Date.now();
+
+function update() {
+    if (game.state !== 'playing') return;
+
+    // Update difficulty
+    game.difficulty = 1 + Math.floor(game.score / 500) * 0.2;
+
+    // Player movement
+    if (isTouching && touchX !== null) {
+        const third = GAME_WIDTH / 3;
+        if (touchX < third) {
+            player.targetX -= player.speed;
+        } else if (touchX > third * 2) {
+            player.targetX += player.speed;
+        }
+    }
+
+    if (keys['ArrowLeft']) player.targetX -= player.speed;
+    if (keys['ArrowRight']) player.targetX += player.speed;
+
+    player.targetX = Math.max(20, Math.min(GAME_WIDTH - 20, player.targetX));
+    player.x += (player.targetX - player.x) * 0.15;
+
+    // Update bullets
+    bullets.forEach((b, i) => {
+        b.y -= b.speed;
+        if (b.y < -20) bullets.splice(i, 1);
+    });
+
+    // Update enemies
+    enemies.forEach((e, i) => {
+        e.y += e.speed;
+        e.time += 0.1;
+
+        if (e.type === 'zigzag') {
+            if (e.startX === 0) e.startX = e.x;
+            e.x = e.startX + Math.sin(e.time) * 50;
+        }
+
+        // Check bullet collision
+        bullets.forEach((b, bi) => {
+            if (Math.abs(e.x - b.x) < 25 && Math.abs(e.y - b.y) < 25) {
+                createExplosion(e.x, e.y, '#ff4444', 15);
+                enemies.splice(i, 1);
+                bullets.splice(bi, 1);
+                game.score += 25;
+            }
+        });
+
+        // Check player collision
+        if (player.alive && Math.abs(e.x - player.x) < 30 && Math.abs(e.y - player.y) < 35) {
+            gameOver();
+        }
+
+        // Remove if off screen
+        if (e.y > GAME_HEIGHT + 50) {
+            enemies.splice(i, 1);
+            game.score += 5;
+        }
+    });
+
+    // Update stars
+    stars.forEach((s, i) => {
+        s.y += s.speed;
+        s.rotation += 3;
+
+        // Check player collision
+        if (player.alive && Math.abs(s.x - player.x) < 25 && Math.abs(s.y - player.y) < 30) {
+            createExplosion(s.x, s.y, '#ffd700', 10);
+            stars.splice(i, 1);
+            game.score += 100;
+        }
+
+        if (s.y > GAME_HEIGHT + 30) stars.splice(i, 1);
+    });
+
+    // Update particles
+    particles.forEach((p, i) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.03;
+        p.size *= 0.95;
+        if (p.life <= 0) particles.splice(i, 1);
+    });
+
+    // Update background stars
+    bgStars.forEach(s => {
+        s.y += s.speed;
+        if (s.y > GAME_HEIGHT) {
+            s.y = 0;
+            s.x = Math.random() * GAME_WIDTH;
+        }
+    });
+
+    // Spawn enemies
+    const spawnRate = Math.max(500, 1500 - game.difficulty * 100);
+    if (Date.now() - lastEnemySpawn > spawnRate) {
+        spawnEnemy();
+        lastEnemySpawn = Date.now();
+    }
+
+    // Spawn stars
+    if (Date.now() - lastStarSpawn > 3000) {
+        spawnStar();
+        lastStarSpawn = Date.now();
+    }
+}
+
+// ============================================================================
+// DRAW
+// ============================================================================
+function drawPlayer() {
+    if (!player.alive) return;
+
+    ctx.save();
+    ctx.translate(player.x, player.y);
+
+    // Glow
+    ctx.shadowColor = '#00ff88';
+    ctx.shadowBlur = 20;
+
+    // Ship body
+    ctx.fillStyle = '#00ff88';
+    ctx.beginPath();
+    ctx.moveTo(0, -24);
+    ctx.lineTo(-20, 20);
+    ctx.lineTo(0, 12);
+    ctx.lineTo(20, 20);
+    ctx.closePath();
+    ctx.fill();
+
+    // Cockpit
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#88ffcc';
+    ctx.beginPath();
+    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Engine flame
+    ctx.fillStyle = '#ff6600';
+    ctx.beginPath();
+    ctx.moveTo(-8, 20);
+    ctx.lineTo(0, 35 + Math.random() * 10);
+    ctx.lineTo(8, 20);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#ffff00';
+    ctx.beginPath();
+    ctx.moveTo(-4, 20);
+    ctx.lineTo(0, 28 + Math.random() * 5);
+    ctx.lineTo(4, 20);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function drawEnemy(e) {
+    ctx.save();
+    ctx.translate(e.x, e.y);
+
+    ctx.shadowColor = '#ff4444';
+    ctx.shadowBlur = 15;
+
+    ctx.fillStyle = '#ff4444';
+    ctx.beginPath();
+    ctx.moveTo(0, 20);
+    ctx.lineTo(-20, -20);
+    ctx.lineTo(0, -10);
+    ctx.lineTo(20, -20);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ff8888';
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function drawStar(s) {
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.rotation * Math.PI / 180);
+
+    ctx.shadowColor = '#ffd700';
+    ctx.shadowBlur = 15;
+    ctx.fillStyle = '#ffd700';
+
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+        const angle = (i * 144 - 90) * Math.PI / 180;
+        const x = Math.cos(angle) * s.size;
+        const y = Math.sin(angle) * s.size;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function draw() {
+    // Clear
+    ctx.fillStyle = '#0a0a1a';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    // Background gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+    gradient.addColorStop(0, '#0a0a1a');
+    gradient.addColorStop(1, '#1a1a3a');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    // Background stars
+    bgStars.forEach(s => {
+        ctx.fillStyle = `rgba(255, 255, 255, ${s.brightness})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Bullets
+    ctx.shadowColor = '#ffff00';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = '#ffff00';
+    bullets.forEach(b => {
+        ctx.fillRect(b.x - 3, b.y, 6, 15);
+    });
+    ctx.shadowBlur = 0;
+
+    // Enemies
+    enemies.forEach(drawEnemy);
+
+    // Stars
+    stars.forEach(drawStar);
+
+    // Player
+    drawPlayer();
+
+    // Particles
+    particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // HUD
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Score: ' + game.score, 15, 30);
+
+    // Menu screen
+    if (game.state === 'menu') {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+        ctx.fillStyle = '#00ff88';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('SPACE', GAME_WIDTH / 2, GAME_HEIGHT / 3);
+        ctx.fillText('RUNNER', GAME_WIDTH / 2, GAME_HEIGHT / 3 + 50);
+
+        ctx.fillStyle = '#888888';
+        ctx.font = '18px Arial';
+        ctx.fillText('Tap left/right to move', GAME_WIDTH / 2, GAME_HEIGHT / 2);
+        ctx.fillText('Tap center to shoot', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 25);
+
+        ctx.fillStyle = '#ffd700';
+        ctx.font = '20px Arial';
+        ctx.fillText('High Score: ' + game.highScore, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 70);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px Arial';
+        const pulse = Math.sin(Date.now() / 300) * 0.3 + 0.7;
+        ctx.globalAlpha = pulse;
+        ctx.fillText('[ TAP TO START ]', GAME_WIDTH / 2, GAME_HEIGHT * 0.75);
+        ctx.globalAlpha = 1;
+    }
+
+    // Game over screen
+    if (game.state === 'gameover') {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+        ctx.fillStyle = '#ff4444';
+        ctx.font = 'bold 40px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('GAME OVER', GAME_WIDTH / 2, GAME_HEIGHT / 3);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '28px Arial';
+        ctx.fillText('Score: ' + game.score, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+
+        ctx.fillStyle = '#ffd700';
+        ctx.font = '22px Arial';
+        ctx.fillText('Best: ' + game.highScore, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 40);
+
+        ctx.fillStyle = '#00ff88';
+        ctx.font = 'bold 22px Arial';
+        const pulse = Math.sin(Date.now() / 300) * 0.3 + 0.7;
+        ctx.globalAlpha = pulse;
+        ctx.fillText('[ TAP TO RESTART ]', GAME_WIDTH / 2, GAME_HEIGHT * 0.7);
+        ctx.globalAlpha = 1;
+    }
+}
+
+// ============================================================================
+// GAME LOOP
+// ============================================================================
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+</body>
+</html>
